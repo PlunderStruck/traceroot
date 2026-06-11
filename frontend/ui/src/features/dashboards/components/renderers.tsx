@@ -95,15 +95,20 @@ export function pivotRows(columns: string[], rows: WidgetQueryResult["rows"]) {
   return { seriesKeys, data };
 }
 
-const fmtNumber = (v: unknown) => {
-  if (typeof v !== "number") return String(v ?? "—");
-  const abs = Math.abs(v);
+export const fmtNumber = (v: unknown) => {
+  // ClickHouse returns Decimal columns as strings; coerce them before formatting.
+  let n: unknown = v;
+  if (typeof n === "string" && n.trim() !== "" && Number.isFinite(Number(n))) {
+    n = Number(n);
+  }
+  if (typeof n !== "number") return String(n ?? "—");
+  const abs = Math.abs(n);
   // Tiny non-zero values (e.g. sub-millidollar costs) would round to "0" with
   // maximumFractionDigits:4; fall back to significant-digit formatting instead.
   if (abs > 0 && abs < 0.001) {
-    return Intl.NumberFormat("en", { maximumSignificantDigits: 2 }).format(v);
+    return Intl.NumberFormat("en", { maximumSignificantDigits: 2 }).format(n);
   }
-  return Intl.NumberFormat("en", { maximumFractionDigits: 4 }).format(v);
+  return Intl.NumberFormat("en", { maximumFractionDigits: 4 }).format(n);
 };
 
 function TimeSeries({ result, area }: { result: WidgetQueryResult; area: boolean }) {

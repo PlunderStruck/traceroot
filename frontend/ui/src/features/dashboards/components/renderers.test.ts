@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { pivotRows } from "./renderers";
+import { fmtNumber, pivotRows } from "./renderers";
+
+describe("fmtNumber", () => {
+  it("formats a numeric string (Decimal from ClickHouse) as a formatted number", () => {
+    expect(fmtNumber("0.379846500")).toBe("0.3798");
+  });
+
+  it("returns non-numeric strings unchanged", () => {
+    expect(fmtNumber("not-a-number")).toBe("not-a-number");
+  });
+
+  it("returns an em dash for null", () => {
+    expect(fmtNumber(null)).toBe("—");
+  });
+});
 
 describe("pivotRows", () => {
   it("pivots bucket+breakdown rows into one series per breakdown value, zero-filling missing combos", () => {

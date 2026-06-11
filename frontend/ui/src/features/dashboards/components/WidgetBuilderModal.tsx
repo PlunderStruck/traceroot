@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -300,6 +301,9 @@ export function WidgetBuilderModal({
           <DialogTitle className="text-[13.5px] font-semibold">
             {editing ? "Edit widget" : "New widget"}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Build a query and choose how to display it.
+          </DialogDescription>
         </DialogHeader>
 
         {/* body: steps left + preview right */}
