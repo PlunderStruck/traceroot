@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Prisma } from "@prisma/client";
 
 vi.mock("next/server", () => ({ NextRequest: class {} }));
 
@@ -191,7 +192,7 @@ describe("GET /dashboards — lazy seeding (no existing dashboards)", () => {
     expect(detectorWidgets).toHaveLength(0);
   });
 
-  it("swallows PK conflict (concurrent creation) and still returns dashboards", async () => {
+  it("swallows PK conflict (P2002) and still returns dashboards", async () => {
     dashboardFindManyMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
       {
         id: "default_proj-1",
@@ -202,12 +203,27 @@ describe("GET /dashboards — lazy seeding (no existing dashboards)", () => {
       },
     ]);
     detectorFindFirstMock.mockResolvedValue(null);
-    dashboardCreateMock.mockRejectedValue(new Error("Unique constraint failed"));
+    dashboardCreateMock.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the fields: (`id`)", {
+        code: "P2002",
+        clientVersion: "5.22.0",
+      }),
+    );
 
     const res = await GET(makeGetRequest(), makeParams("proj-1"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: unknown[] };
     expect(body.data).toHaveLength(1);
+  });
+
+  it("propagates non-PK-clash errors from dashboard.create", async () => {
+    dashboardFindManyMock.mockResolvedValueOnce([]);
+    detectorFindFirstMock.mockResolvedValue(null);
+    dashboardCreateMock.mockRejectedValue(new Error("Database connection lost"));
+
+    await expect(GET(makeGetRequest(), makeParams("proj-1"))).rejects.toThrow(
+      "Database connection lost",
+    );
   });
 });
 
@@ -279,6 +295,33 @@ describe("POST /dashboards — create a named dashboard", () => {
     });
     const res = await POST(makePostRequest({ name: "x" }), makeParams());
     expect(res.status).toBe(401);
+    expect(dashboardCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when the user lacks project access", async () => {
+    requireProjectAccessMock.mockResolvedValue({
+      error: { status: 403, json: async () => ({ error: "Forbidden" }) },
+    });
+    const res = await POST(makePostRequest({ name: "x" }), makeParams());
+    expect(res.status).toBe(403);
+    expect(dashboardCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a null body (non-object JSON)", async () => {
+    const req = {
+      json: async () => null,
+    } as unknown as Parameters<typeof POST>[0];
+    const res = await POST(req, makeParams());
+    expect(res.status).toBe(400);
+    expect(dashboardCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an array body (non-object JSON)", async () => {
+    const req = {
+      json: async () => ["a", "b"],
+    } as unknown as Parameters<typeof POST>[0];
+    const res = await POST(req, makeParams());
+    expect(res.status).toBe(400);
     expect(dashboardCreateMock).not.toHaveBeenCalled();
   });
 });

@@ -105,7 +105,7 @@ export function seedWidgets(detectorId: string | null): SeedWidget[] {
       title: "Detector",
       type: "detector",
       spec: { detectorId },
-      layout: { x: 8, y: 6, w: 4, h: 4 },
+      layout: { x: 0, y: 10, w: 4, h: 4 },
     });
   }
   return widgets;

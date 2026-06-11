@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@traceroot/core";
 import {
   requireAuth,
@@ -36,6 +37,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       select: { id: true },
     });
     const widgets = seedWidgets(detector?.id ?? null);
+    const seeded = widgets.map((w, i) => ({ ...w, id: `seed-${i}-${projectId}` }));
     try {
       await prisma.dashboard.create({
         data: {
@@ -45,19 +47,15 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
           isDefault: true,
           createdBy: user.id,
           // layout keys MUST equal widget ids (react-grid-layout matches on `i`)
-          layout: widgets.map((w, i) => ({ i: `seed-${i}-${projectId}`, ...w.layout })),
+          layout: seeded.map((w) => ({ i: w.id, ...w.layout })),
           widgets: {
-            create: widgets.map((w, i) => ({
-              id: `seed-${i}-${projectId}`,
-              title: w.title,
-              type: w.type,
-              spec: w.spec,
-            })),
+            create: seeded.map((w) => ({ id: w.id, title: w.title, type: w.type, spec: w.spec })),
           },
         },
       });
-    } catch {
+    } catch (e) {
       // Concurrent first-visit: another request already created it (PK clash).
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") throw e;
     }
     dashboards = await prisma.dashboard.findMany(listArgs(projectId));
   }
@@ -81,7 +79,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   } catch {
     return errorResponse("Invalid JSON", 400);
   }
-  const { name, description } = (body ?? {}) as Record<string, unknown>;
+
+  // `null` is valid JSON but not destructure-friendly. Reject explicitly.
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return errorResponse("Body must be a JSON object", 400);
+  }
+
+  const { name, description } = body as Record<string, unknown>;
   if (typeof name !== "string" || name.trim().length === 0) {
     return errorResponse("name must be a non-empty string", 400);
   }
