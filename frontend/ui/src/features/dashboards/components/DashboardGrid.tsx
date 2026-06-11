@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { GridLayout } from "react-grid-layout";
 import type { Layout, LayoutItem as RGLLayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -50,17 +50,45 @@ export function DashboardGrid({
 
   // Snapshot of the last layout sent upstream, used to skip no-op PATCH calls.
   // react-grid-layout fires onLayoutChange on mount with the initial layout, so
-  // we compare JSON to avoid a needless PATCH when nothing has actually moved.
+  // we lazy-init lastSentRef on the first handleChange call to the incoming
+  // layout's JSON — that way the mount-fire only triggers an upstream call if
+  // the layout genuinely differs (e.g. real compaction), not unconditionally.
   const lastSentRef = useRef<string | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Holds the most-recently-computed mapped layout so the unmount cleanup can
+  // flush it synchronously if a debounce timer is still pending.
+  const pendingMappedRef = useRef<LayoutItem[] | null>(null);
+
+  // On unmount: if a debounce is still pending, cancel the timer and flush the
+  // pending layout change synchronously so the last drag is never silently lost.
+  useEffect(
+    () => () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        if (pendingMappedRef.current) {
+          onLayoutChange(pendingMappedRef.current);
+        }
+      }
+    },
+    [],
+  );
 
   const handleChange = (next: Layout) => {
+    const mapped: LayoutItem[] = next.map(({ i, x, y, w, h }) => ({ i, x, y, w, h }));
+
+    // Lazy-init: on the first call (mount-fire from react-grid-layout) treat the
+    // incoming layout as already-sent so we don't PATCH unless it truly changed.
+    if (lastSentRef.current === null) {
+      lastSentRef.current = JSON.stringify(mapped);
+    }
+
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    pendingMappedRef.current = mapped;
     debounceTimer.current = setTimeout(() => {
-      const mapped: LayoutItem[] = next.map(({ i, x, y, w, h }) => ({ i, x, y, w, h }));
       const json = JSON.stringify(mapped);
       if (json === lastSentRef.current) return;
       lastSentRef.current = json;
+      pendingMappedRef.current = null;
       onLayoutChange(mapped);
     }, 600);
   };

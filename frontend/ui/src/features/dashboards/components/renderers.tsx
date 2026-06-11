@@ -87,7 +87,7 @@ export function pivotRows(columns: string[], rows: WidgetQueryResult["rows"]) {
   const data = [...byBucket.values()].map((row) => {
     const filled = { ...row };
     for (const k of seriesKeys) {
-      if (!(k in filled)) filled[k] = 0;
+      if (!Object.hasOwn(filled, k)) filled[k] = 0;
     }
     return filled;
   });
