@@ -1,32 +1,27 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { LayoutDashboard } from "lucide-react";
-import { ProjectBreadcrumb } from "@/features/projects/components";
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useDashboards } from "@/features/dashboards/hooks/use-dashboards";
 
-export default function DashboardPage() {
+export default function DashboardIndexPage() {
   const params = useParams();
+  const router = useRouter();
   const projectId = params.projectId as string;
+  const { data: dashboards } = useDashboards(projectId);
+
+  useEffect(() => {
+    // The list endpoint lazily seeds the default Overview, so there is always
+    // at least one dashboard once the query resolves.
+    if (dashboards && dashboards.length > 0) {
+      const target = dashboards.find((d) => d.isDefault) ?? dashboards[0];
+      router.replace(`/projects/${projectId}/dashboard/${target.id}`);
+    }
+  }, [dashboards, projectId, router]);
 
   return (
-    <div className="relative flex h-full text-[13px]">
-      <ProjectBreadcrumb projectId={projectId} />
-
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Page header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <h1 className="text-[13px] font-medium">Dashboard</h1>
-        </div>
-
-        {/* Coming soon placeholder */}
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-background">
-          <LayoutDashboard className="h-8 w-8 text-muted-foreground/40" />
-          <p className="text-[13px] text-muted-foreground">Coming soon</p>
-          <p className="text-[12px] text-muted-foreground">
-            The dashboard is under construction. Check back later.
-          </p>
-        </div>
-      </div>
+    <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
+      Loading dashboards…
     </div>
   );
 }
