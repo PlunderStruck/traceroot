@@ -4,12 +4,14 @@ from datetime import datetime
 from typing import get_args
 
 import pytest
+from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
 from rest.schemas.dashboards import (
     AggName,
     WidgetFilter,
     WidgetQueryRequest,
+    WidgetQueryResponse,
     WidgetSpec,
 )
 from rest.services.widget_query import WidgetSpecError, compile_widget_query
@@ -234,3 +236,64 @@ def test_count_measure_with_breakdown():
     sql, _ = compile_(spec)
     assert "count(*)" in sql
     assert "GROUP BY model_name" in sql
+
+
+# --- Validation-review fix tests ---
+
+
+def test_contains_filter_escapes_percent():
+    """A contains filter with '%' in the value must bind an escaped ILIKE pattern.
+
+    Without escaping, '50%' would act as a wildcard matching '50' followed by
+    anything. The escaped pattern '%50\\%%' makes the '%' match literally.
+    """
+    filters = [{"field": "name", "op": "contains", "value": "50%"}]
+    _, params = compile_(make_spec(filters=filters, breakdown=None))
+    assert params["f0"] == "%50\\%%"
+
+
+def test_bucket_timestamp_serializes_as_iso8601():
+    """WidgetQueryResponse rows with datetime values must serialize to ISO-8601.
+
+    The frontend keys on the exact string 'YYYY-MM-DDTHH:MM:SS' (no timezone
+    suffix) to identify time-bucket columns. jsonable_encoder (used by FastAPI's
+    response pipeline) must produce that format.
+    """
+    response = WidgetQueryResponse(
+        columns=["bucket", "value"],
+        rows=[[datetime(2026, 6, 1), 1.0]],
+    )
+    encoded = jsonable_encoder(response)
+    assert encoded["rows"][0][0] == "2026-06-01T00:00:00"
+
+
+def test_empty_rows_validates_and_serializes():
+    """WidgetQueryResponse with no rows is valid and encodes to rows: []."""
+    response = WidgetQueryResponse(columns=["value"], rows=[])
+    encoded = jsonable_encoder(response)
+    assert encoded["rows"] == []
+
+
+def test_traces_view_null_guards_measures():
+    """The traces base relation must NULL-guard measures for span-less traces.
+
+    Rows from the LEFT JOIN where no matching spans exist have sa.trace_id = ''
+    (ClickHouse fills String join-key columns with empty string on no match).
+    The if(sa.trace_id = '', NULL, ...) pattern converts those to NULL so
+    aggregations ignore span-less traces rather than treating the default value
+    as real data.
+    """
+    spec = make_spec(view="traces", filters=[], breakdown=None)
+    spec["metric"] = {"measure": "duration_ms", "agg": "avg"}
+    spec["display"] = {"type": "number"}
+    sql, _ = compile_(spec)
+    assert "if(sa.trace_id = ''" in sql
+
+
+def test_traces_p95_compiles_to_quantile():
+    """p95 on traces must compile to quantile(0.95)(...) — pins the agg mapping."""
+    spec = make_spec(view="traces", filters=[], breakdown=None)
+    spec["metric"] = {"measure": "duration_ms", "agg": "p95"}
+    spec["display"] = {"type": "number"}
+    sql, _ = compile_(spec)
+    assert "quantile(0.95)(duration_ms)" in sql

@@ -12,6 +12,7 @@ from typing import Any
 from db.clickhouse import get_clickhouse_client
 from rest.schemas.dashboards import WidgetSpec
 from rest.services.widget_registry import REGISTRY, FieldDef
+from rest.sql_utils import escape_ilike
 
 MAX_GROUPS = 50  # top-N breakdown groups; remainder folds into "other"
 MAX_TABLE_ROWS = 1000
@@ -87,7 +88,12 @@ def compile_widget_query(
         pname = f"f{i}"
         if f.type == "string":
             ch_type = "String"
-            param_value = f"%{flt.value}%" if flt.op == "contains" else flt.value
+            if flt.op == "contains":
+                # Escape %, _, and \ so they match literally rather than acting
+                # as ILIKE wildcards or escape characters in the user's value.
+                param_value = f"%{escape_ilike(str(flt.value))}%"
+            else:
+                param_value = flt.value
         else:
             ch_type = "Float64"
             try:
@@ -153,6 +159,10 @@ def compile_widget_query(
         # 'other' so a high-cardinality breakdown can't return unbounded rows.
         # Note: a genuine breakdown value named "other" will merge with this fold
         # bucket — accepted tradeoff for simplicity.
+        # NULL breakdown values also fold into 'other': NULL fails the IN
+        # membership test so the outer if() takes the else branch. Intentional —
+        # surfacing a separate NULL bucket would require extra special-casing for
+        # little benefit on the dashboard.
         select_cols.append(
             f"if({bd.expr} IN (SELECT {bd.expr} FROM {base} {where} "
             f"GROUP BY {bd.expr} ORDER BY {metric_sql} DESC LIMIT {MAX_GROUPS}), "
