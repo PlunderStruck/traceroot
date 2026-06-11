@@ -7,7 +7,10 @@ reference aliases produced by each view's base relation (see `base_sql`),
 never raw user input.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import Literal
 
 FILTER_OPS_STRING = ("=", "!=", "contains")
 FILTER_OPS_NUMBER = (">", ">=", "<", "<=", "=", "!=")
@@ -17,8 +20,10 @@ AGGS_NUMBER = ("sum", "avg", "min", "max", "p50", "p95", "p99")
 @dataclass(frozen=True)
 class FieldDef:
     expr: str  # SQL over the view's base relation aliases
-    type: str  # "string" | "number"
+    type: Literal["string", "number"]
     label: str
+    # filterOps: camelCase deliberate — this dict is the JSON contract consumed
+    # directly by the frontend builder UI.
     filter_ops: tuple[str, ...] = ()
     groupable: bool = False
     aggs: tuple[str, ...] = ()
@@ -35,12 +40,14 @@ class ViewDef:
 
 _SPANS_BASE = """
     SELECT
-        span_id, trace_id, name, span_kind, status, model_name, environment,
+        name, span_kind, status, model_name, environment,
         span_start_time AS event_time,
         dateDiff('millisecond', span_start_time, span_end_time) AS duration_ms,
         cost, input_tokens, output_tokens, total_tokens
     FROM (
-        SELECT *
+        SELECT
+            span_id, trace_id, name, span_kind, status, model_name, environment,
+            span_start_time, span_end_time, cost, input_tokens, output_tokens, total_tokens
         FROM spans
         WHERE project_id = {project_id:String}
           AND span_start_time >= {start_time:DateTime64(3)}
@@ -51,16 +58,27 @@ _SPANS_BASE = """
 """
 
 # Trace-level metrics do not exist as physical columns; they are aggregated
-# from spans per trace (same pattern as TraceReaderService.list_traces).
+# from spans per trace. The spans subquery is bounded by the same dashboard
+# time window as the traces query, so a trace whose spans extend beyond the
+# window edge will have those later spans excluded. This means duration,
+# cost, and token counts here may differ from the per-trace detail page (which
+# joins all spans for a trace). The tradeoff is a bounded, fast scan for
+# dashboards vs. exact per-trace metrics in the trace list.
 _TRACES_BASE = """
     SELECT
-        t.trace_id AS trace_id, t.name AS name, t.user_id AS user_id,
+        t.name AS name, t.user_id AS user_id,
         t.session_id AS session_id, t.environment AS environment,
         t.trace_start_time AS event_time,
-        sa.duration_ms AS duration_ms, sa.error_count AS error_count,
-        sa.total_cost AS cost, sa.total_tokens AS total_tokens
+        -- NULL out measures for non-matched LEFT JOIN rows; ClickHouse fills
+        -- String join key columns with '' (empty string) when there is no match,
+        -- so sa.trace_id = '' reliably identifies un-joined traces.
+        if(sa.trace_id = '', NULL, sa.duration_ms) AS duration_ms,
+        if(sa.trace_id = '', NULL, sa.error_count) AS error_count,
+        if(sa.trace_id = '', NULL, sa.total_cost) AS cost,
+        if(sa.trace_id = '', NULL, sa.total_tokens) AS total_tokens
     FROM (
-        SELECT *
+        SELECT
+            trace_id, name, user_id, session_id, environment, trace_start_time
         FROM traces
         WHERE project_id = {project_id:String}
           AND trace_start_time >= {start_time:DateTime64(3)}
@@ -71,12 +89,17 @@ _TRACES_BASE = """
     LEFT JOIN (
         SELECT
             trace_id,
-            dateDiff('millisecond', min(span_start_time), max(span_end_time)) AS duration_ms,
+            if(
+                min(span_start_time) IS NOT NULL AND max(span_end_time) IS NOT NULL,
+                dateDiff('millisecond', min(span_start_time), max(span_end_time)),
+                NULL
+            ) AS duration_ms,
             countIf(status = 'ERROR') AS error_count,
             sum(cost) AS total_cost,
             sum(total_tokens) AS total_tokens
         FROM (
-            SELECT *
+            SELECT
+                trace_id, span_id, status, span_start_time, span_end_time, cost, total_tokens
             FROM spans
             WHERE project_id = {project_id:String}
               AND span_start_time >= {start_time:DateTime64(3)}
@@ -123,6 +146,7 @@ REGISTRY: dict[str, ViewDef] = {
             "input_tokens": _number_measure("input_tokens", "Input tokens"),
             "output_tokens": _number_measure("output_tokens", "Output tokens"),
             "total_tokens": _number_measure("total_tokens", "Total tokens"),
+            # expr="*" is a sentinel: the compiler translates it to count(*).
             "count": FieldDef(expr="*", type="number", label="Count", aggs=("count",)),
         },
     ),
@@ -137,6 +161,7 @@ REGISTRY: dict[str, ViewDef] = {
             "cost": _number_measure("cost", "Cost (USD)"),
             "total_tokens": _number_measure("total_tokens", "Total tokens"),
             "error_count": _number_measure("error_count", "Error count"),
+            # expr="*" is a sentinel: the compiler translates it to count(*).
             "count": FieldDef(expr="*", type="number", label="Count", aggs=("count",)),
         },
     ),
