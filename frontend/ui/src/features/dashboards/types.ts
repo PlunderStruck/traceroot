@@ -34,8 +34,12 @@ export type DraftSpec = Partial<Omit<WidgetSpec, "metric" | "display">> & {
   display?: Partial<WidgetSpec["display"]>;
 };
 
+export function parseSpec(draft: unknown): WidgetSpec | null {
+  return WidgetSpecSchema.safeParse(draft).data ?? null;
+}
+
 export function isSpecComplete(draft: unknown): draft is WidgetSpec {
-  return WidgetSpecSchema.safeParse(draft).success;
+  return parseSpec(draft) !== null;
 }
 
 export interface DashboardSummary {

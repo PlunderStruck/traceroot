@@ -56,7 +56,7 @@ export function useDashboardMutations(projectId: string, dashboardId?: string) {
 
   const removeDashboard = useMutation({
     mutationFn: (id: string) => api.deleteDashboard(projectId, id),
-    onSuccess: () => invalidateDashboards(queryClient, projectId),
+    onSuccess: (_data, id) => invalidateDashboards(queryClient, projectId, id),
   });
 
   const createWidget = useMutation({

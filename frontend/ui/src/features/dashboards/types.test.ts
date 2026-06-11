@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WidgetSpecSchema, isSpecComplete } from "./types";
+import { WidgetSpecSchema, isSpecComplete, parseSpec } from "./types";
 
 const validSpec = {
   view: "spans",
@@ -26,5 +26,14 @@ describe("isSpecComplete", () => {
   });
   it("true for a runnable spec", () => {
     expect(isSpecComplete(validSpec)).toBe(true);
+  });
+});
+
+describe("parseSpec", () => {
+  it("applies defaults so filters is [] when omitted", () => {
+    const { filters: _omit, ...withoutFilters } = validSpec;
+    const result = parseSpec(withoutFilters);
+    expect(result).not.toBeNull();
+    expect(result!.filters).toEqual([]);
   });
 });

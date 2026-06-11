@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSession as useAuthSession } from "@/lib/auth-client";
 import type { TraceApiUser } from "@/lib/api/client";
 import * as api from "../api";
-import { isSpecComplete, type TimeRange, type WidgetSpec } from "../types";
+import { isSpecComplete, parseSpec, type TimeRange, type WidgetSpec } from "../types";
 
 export function useWidgetSchema(projectId: string) {
   const { data: authSession, isPending } = useAuthSession();
@@ -56,9 +56,15 @@ export function useWidgetPreview(projectId: string, draft: unknown, range: TimeR
     : undefined;
 
   return useQuery({
-    queryKey: ["widget-preview", projectId, JSON.stringify(draft)],
-    queryFn: () => api.runWidgetQuery(projectId, draft as WidgetSpec, range, user),
-    enabled: sessionReady && isSpecComplete(draft),
+    queryKey: [
+      "widget-preview",
+      projectId,
+      JSON.stringify(draft),
+      range.start.getTime(),
+      range.end.getTime(),
+    ],
+    queryFn: () => api.runWidgetQuery(projectId, parseSpec(draft)!, range, user),
+    enabled: sessionReady && !!projectId && isSpecComplete(draft),
     staleTime: 10_000,
     retry: false,
   });
