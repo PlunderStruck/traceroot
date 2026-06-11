@@ -1,0 +1,92 @@
+"use client";
+
+import { useMemo, useRef } from "react";
+import { GridLayout } from "react-grid-layout";
+import type { Layout, LayoutItem as RGLLayoutItem } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import type { LayoutItem, TimeRange, Widget } from "../types";
+import { WidgetCard } from "./WidgetCard";
+
+const COLS = 12;
+const ROW_HEIGHT = 56;
+
+export function DashboardGrid({
+  projectId,
+  widgets,
+  layout,
+  range,
+  live,
+  width,
+  onLayoutChange,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: {
+  projectId: string;
+  widgets: Widget[];
+  layout: LayoutItem[];
+  range: TimeRange;
+  live: boolean;
+  width: number;
+  onLayoutChange: (layout: LayoutItem[]) => void;
+  onEdit: (w: Widget) => void;
+  onDuplicate: (w: Widget) => void;
+  onDelete: (w: Widget) => void;
+}) {
+  // Widgets missing from layout (e.g. just created) get appended at the bottom.
+  // Stale layout entries for deleted widgets are tolerated: fullLayout maps
+  // from widgets, so extras in the stored layout are simply ignored.
+  const fullLayout: RGLLayoutItem[] = useMemo(() => {
+    const known = new Map(layout.map((l) => [l.i, l]));
+    let maxY = Math.max(0, ...layout.map((l) => l.y + l.h));
+    return widgets.map((w) => {
+      const item = known.get(w.id);
+      if (item) return item;
+      const fresh: RGLLayoutItem = { i: w.id, x: 0, y: maxY, w: 4, h: 4 };
+      maxY += 4;
+      return fresh;
+    });
+  }, [widgets, layout]);
+
+  // Snapshot of the last layout sent upstream, used to skip no-op PATCH calls.
+  // react-grid-layout fires onLayoutChange on mount with the initial layout, so
+  // we compare JSON to avoid a needless PATCH when nothing has actually moved.
+  const lastSentRef = useRef<string | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleChange = (next: Layout) => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      const mapped: LayoutItem[] = next.map(({ i, x, y, w, h }) => ({ i, x, y, w, h }));
+      const json = JSON.stringify(mapped);
+      if (json === lastSentRef.current) return;
+      lastSentRef.current = json;
+      onLayoutChange(mapped);
+    }, 600);
+  };
+
+  return (
+    <GridLayout
+      className="layout"
+      layout={fullLayout}
+      gridConfig={{ cols: COLS, rowHeight: ROW_HEIGHT }}
+      dragConfig={{ handle: ".drag-handle" }}
+      width={width}
+      onLayoutChange={handleChange}
+    >
+      {widgets.map((w) => (
+        <div key={w.id} className="group">
+          <WidgetCard
+            projectId={projectId}
+            widget={w}
+            range={range}
+            live={live}
+            onEdit={() => onEdit(w)}
+            onDuplicate={() => onDuplicate(w)}
+            onDelete={() => onDelete(w)}
+          />
+        </div>
+      ))}
+    </GridLayout>
+  );
+}

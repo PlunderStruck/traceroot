@@ -25,6 +25,7 @@ export function useWidgetData(
   spec: WidgetSpec,
   range: TimeRange,
   live: boolean,
+  enabled = true,
 ) {
   const { data: authSession, isPending } = useAuthSession();
   const sessionReady = !isPending && !!authSession?.user;
@@ -42,7 +43,7 @@ export function useWidgetData(
       range.end.getTime(),
     ],
     queryFn: () => api.runWidgetQuery(projectId, spec, range, user),
-    enabled: sessionReady && !!projectId && !!widgetId,
+    enabled: enabled && sessionReady && !!projectId && !!widgetId,
     refetchInterval: live ? 30_000 : false,
     retry: 1,
   });

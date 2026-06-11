@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -51,43 +52,77 @@ export function pivotRows(columns: string[], rows: WidgetQueryResult["rows"]) {
   if (!hasBucket) {
     // categorical: one row per dimension value
     return {
-      seriesKeys: rows.map((r) => String(r[dimIdx])),
+      seriesKeys: rows.map((r) => String(r[dimIdx] ?? "null")),
       data: rows.map((r) => ({
-        name: String(r[dimIdx]),
+        name: String(r[dimIdx] ?? "null"),
         value: r[valueIdx],
       })),
     };
   }
 
   const seriesKeys: string[] = [];
+  // O(1) membership check alongside the ordered array
+  const seriesKeySet = new Set<string>();
   const byBucket = new Map<string, Record<string, unknown>>();
+
   for (const r of rows) {
     const bucket = String(r[0]);
-    const dim = String(r[dimIdx]);
-    if (!seriesKeys.includes(dim)) seriesKeys.push(dim);
+    const rawDim = r[dimIdx];
+    // Guard against key collisions with internal properties: if a dim value is
+    // "bucket" or "__proto__", prefix it so it doesn't stomp on the pivot row shape.
+    const dim =
+      rawDim === "bucket" || rawDim === "__proto__" ? `series:${rawDim}` : String(rawDim ?? "null");
+
+    if (!seriesKeySet.has(dim)) {
+      seriesKeys.push(dim);
+      seriesKeySet.add(dim);
+    }
     if (!byBucket.has(bucket)) byBucket.set(bucket, { bucket });
     byBucket.get(bucket)![dim] = r[valueIdx];
   }
-  return { seriesKeys, data: [...byBucket.values()] };
+
+  // Uniform zero-fill: missing series keys per bucket are set to 0 so
+  // line/area charts tell the same story. Honest for count/sum (the dominant
+  // dashboard aggregations), slightly lossy for percentile gaps — accepted tradeoff.
+  const data = [...byBucket.values()].map((row) => {
+    const filled = { ...row };
+    for (const k of seriesKeys) {
+      if (!(k in filled)) filled[k] = 0;
+    }
+    return filled;
+  });
+
+  return { seriesKeys, data };
 }
 
-const fmtNumber = (v: unknown) =>
-  typeof v === "number"
-    ? Intl.NumberFormat("en", { maximumFractionDigits: 4 }).format(v)
-    : String(v ?? "—");
+const fmtNumber = (v: unknown) => {
+  if (typeof v !== "number") return String(v ?? "—");
+  const abs = Math.abs(v);
+  // Tiny non-zero values (e.g. sub-millidollar costs) would round to "0" with
+  // maximumFractionDigits:4; fall back to significant-digit formatting instead.
+  if (abs > 0 && abs < 0.001) {
+    return Intl.NumberFormat("en", { maximumSignificantDigits: 2 }).format(v);
+  }
+  return Intl.NumberFormat("en", { maximumFractionDigits: 4 }).format(v);
+};
 
 function TimeSeries({ result, area }: { result: WidgetQueryResult; area: boolean }) {
-  const { seriesKeys, data } = pivotRows(result.columns, result.rows);
+  const { seriesKeys, data } = useMemo(() => pivotRows(result.columns, result.rows), [result]);
   const Chart = area ? AreaChart : LineChart;
+  const granularity = result.meta.granularity;
+
+  const tickFormatter =
+    granularity === "day"
+      ? (v: unknown) => String(v).slice(5, 10)
+      : granularity === "hour"
+        ? (v: unknown) => String(v).slice(5, 16).replace("T", " ")
+        : (v: unknown) => String(v).slice(5, 16);
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <Chart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid strokeOpacity={0.15} vertical={false} />
-        <XAxis
-          dataKey="bucket"
-          tick={{ fontSize: 10 }}
-          tickFormatter={(v) => String(v).slice(5, 16)}
-        />
+        <XAxis dataKey="bucket" tick={{ fontSize: 10 }} tickFormatter={tickFormatter} />
         <YAxis tick={{ fontSize: 10 }} width={42} />
         <Tooltip />
         {seriesKeys.map((k, i) =>
@@ -116,7 +151,7 @@ function TimeSeries({ result, area }: { result: WidgetQueryResult; area: boolean
 }
 
 function Bars({ result }: { result: WidgetQueryResult }) {
-  const { data } = pivotRows(result.columns, result.rows);
+  const { data } = useMemo(() => pivotRows(result.columns, result.rows), [result]);
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
@@ -140,7 +175,7 @@ function Bars({ result }: { result: WidgetQueryResult }) {
 }
 
 function PieView({ result }: { result: WidgetQueryResult }) {
-  const { data } = pivotRows(result.columns, result.rows);
+  const { data } = useMemo(() => pivotRows(result.columns, result.rows), [result]);
   return (
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
