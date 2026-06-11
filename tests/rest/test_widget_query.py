@@ -199,10 +199,10 @@ def test_non_numeric_filter_value_raises():
 
 
 def test_long_range_row_cap():
-    """A 366-day line+breakdown window should produce LIMIT >= 366*51."""
+    """A misaligned 365-day window (noon-to-noon) touches 366 day buckets; LIMIT must cover all of them."""
     spec = WidgetSpec.model_validate(make_spec(display={"type": "line"}))
-    start = datetime(2026, 1, 1)
-    end = datetime(2027, 1, 2)  # 366 days
+    start = datetime(2026, 1, 1, 12, 0)
+    end = datetime(2027, 1, 1, 12, 0)  # 365 days, noon-anchored — straddles 366 day buckets
     sql, _ = compile_widget_query(spec, project_id="p", start_time=start, end_time=end)
     # Extract the final LIMIT clause (the outermost row cap, not LIMIT 1 BY inside base SQL)
     import re

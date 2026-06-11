@@ -181,7 +181,8 @@ def compile_widget_query(
         gran = _pick_granularity(start_time, end_time)
         granule_seconds = 3600 if gran == "hour" else 86400
         window_seconds = (end_time - start_time).total_seconds()
-        n_buckets = math.ceil(window_seconds / granule_seconds)
+        # +1: misaligned windows straddle one extra bucket (half-open [start, end) over toStartOfX boundaries).
+        n_buckets = math.ceil(window_seconds / granule_seconds) + 1
         row_limit = n_buckets * (MAX_GROUPS + 1)
     elif spec.breakdown is not None:
         # Pure breakdown (no time axis): one row per group + 'other'.
