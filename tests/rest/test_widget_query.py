@@ -1,5 +1,6 @@
 """Tests for widget spec models; SQL compiler tests are added by a later task."""
 
+from datetime import datetime
 from typing import get_args
 
 import pytest
@@ -11,6 +12,7 @@ from rest.schemas.dashboards import (
     WidgetQueryRequest,
     WidgetSpec,
 )
+from rest.services.widget_query import WidgetSpecError, compile_widget_query
 from rest.services.widget_registry import (
     AGGS_NUMBER,
     FILTER_OPS_NUMBER,
@@ -85,14 +87,6 @@ def test_unknown_key_in_spec_rejected():
 
 # --- SQL compiler tests ---
 
-from datetime import datetime  # noqa: E402
-
-try:
-    from rest.services.widget_query import WidgetSpecError, compile_widget_query
-except ModuleNotFoundError:
-    compile_widget_query = None  # type: ignore[assignment]
-    WidgetSpecError = None  # type: ignore[assignment]
-
 START = datetime(2026, 6, 1)
 END = datetime(2026, 6, 8)
 
@@ -115,8 +109,8 @@ def test_compile_breakdown_bar():
 
 def test_compile_timeseries_adds_bucket():
     sql, params = compile_(make_spec(display={"type": "line"}))
-    # 7-day range → day buckets
-    assert "toStartOfDay(event_time)" in sql
+    # 7-day range → day buckets in UTC
+    assert "toStartOfDay(event_time, 'UTC')" in sql
     assert params["start_time"] == START
 
 
@@ -125,7 +119,7 @@ def test_compile_hour_bucket_for_short_range():
     sql, _ = compile_widget_query(
         spec, project_id="p", start_time=datetime(2026, 6, 1), end_time=datetime(2026, 6, 2)
     )
-    assert "toStartOfHour(event_time)" in sql
+    assert "toStartOfHour(event_time, 'UTC')" in sql
 
 
 def test_compile_number_no_groupby():
@@ -137,7 +131,7 @@ def test_compile_histogram():
     spec = make_spec(display={"type": "histogram"}, breakdown=None)
     spec["metric"] = {"measure": "duration_ms", "agg": "avg"}  # agg ignored for histogram
     sql, _ = compile_(spec)
-    assert "histogram(20)(duration_ms)" in sql
+    assert "histogram(20)(toFloat64(duration_ms))" in sql
 
 
 def test_compile_traces_view_uses_span_agg():
@@ -173,3 +167,70 @@ def test_disallowed_op_for_type_raises():
     with pytest.raises(WidgetSpecError) as e:
         compile_(make_spec(filters=[{"field": "name", "op": ">", "value": "x"}]))
     assert e.value.step == "filters"
+
+
+# --- New tests for items 8-10 ---
+
+
+def test_histogram_cost_contains_tofloat64():
+    """cost is Decimal in ClickHouse; histogram() must receive toFloat64(cost)."""
+    spec = make_spec(display={"type": "histogram"}, breakdown=None)
+    spec["metric"] = {"measure": "cost", "agg": "sum"}
+    sql, _ = compile_(spec)
+    assert "toFloat64" in sql
+    assert "toFloat64(cost)" in sql
+
+
+def test_histogram_with_breakdown_raises():
+    """Histogram does not support a breakdown dimension."""
+    spec = make_spec(display={"type": "histogram"}, breakdown="model_name")
+    spec["metric"] = {"measure": "cost", "agg": "sum"}
+    with pytest.raises(WidgetSpecError) as e:
+        compile_(spec)
+    assert e.value.step == "breakdown"
+
+
+def test_non_numeric_filter_value_raises():
+    """A string value on a number-typed filter field must raise step='filters'."""
+    filters = [{"field": "cost", "op": ">", "value": "not-a-number"}]
+    with pytest.raises(WidgetSpecError) as e:
+        compile_(make_spec(filters=filters, breakdown=None))
+    assert e.value.step == "filters"
+
+
+def test_long_range_row_cap():
+    """A 366-day line+breakdown window should produce LIMIT >= 366*51."""
+    spec = WidgetSpec.model_validate(make_spec(display={"type": "line"}))
+    start = datetime(2026, 1, 1)
+    end = datetime(2027, 1, 2)  # 366 days
+    sql, _ = compile_widget_query(spec, project_id="p", start_time=start, end_time=end)
+    # Extract the final LIMIT clause (the outermost row cap, not LIMIT 1 BY inside base SQL)
+    import re
+
+    matches = re.findall(r"LIMIT (\d+)(?! BY)", sql)
+    assert matches, "No outermost LIMIT found in SQL"
+    assert int(matches[-1]) >= 366 * 51
+
+
+def test_breakdown_timeseries_order_by():
+    """When breakdown and timeseries are both present, ORDER BY must include both bucket and breakdown."""
+    sql, _ = compile_(make_spec(display={"type": "line"}))
+    assert "GROUP BY bucket, model_name" in sql
+    assert "ORDER BY bucket, model_name" in sql
+
+
+def test_other_fold_shape():
+    """The 'other' fold uses a subquery with LIMIT 50 (MAX_GROUPS)."""
+    sql, _ = compile_(make_spec(display={"type": "bar"}))
+    assert "'other'" in sql
+    assert "IN (SELECT" in sql
+    assert "LIMIT 50" in sql
+
+
+def test_count_measure_with_breakdown():
+    """count measure (expr='*') must compile with count(*) and a breakdown."""
+    spec = make_spec(display={"type": "bar"})
+    spec["metric"] = {"measure": "count", "agg": "count"}
+    sql, _ = compile_(spec)
+    assert "count(*)" in sql
+    assert "GROUP BY model_name" in sql

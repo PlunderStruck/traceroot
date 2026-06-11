@@ -5,6 +5,7 @@ expressions; every user value binds as a ClickHouse parameter. User strings
 never appear in SQL text, so injection is structurally impossible.
 """
 
+import math
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -84,21 +85,35 @@ def compile_widget_query(
                 f"Op '{flt.op}' not allowed for '{flt.field}'. Allowed: {list(f.filter_ops)}",
             )
         pname = f"f{i}"
-        ch_type = "String" if f.type == "string" else "Float64"
+        if f.type == "string":
+            ch_type = "String"
+            param_value = f"%{flt.value}%" if flt.op == "contains" else flt.value
+        else:
+            ch_type = "Float64"
+            try:
+                param_value = float(flt.value)
+            except (ValueError, TypeError):
+                raise WidgetSpecError(
+                    "filters", f"Value for '{flt.field}' must be numeric"
+                ) from None
         conditions.append(_OP_SQL[flt.op].format(expr=f.expr, p=pname, t=ch_type))
-        params[pname] = f"%{flt.value}%" if flt.op == "contains" else flt.value
+        params[pname] = param_value
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     base = f"({view.base_sql})"
 
     # --- histogram compiles to its own shape ---
     if spec.display.type == "histogram":
+        if spec.breakdown is not None:
+            raise WidgetSpecError("breakdown", "Histogram does not support a breakdown dimension")
         measure = _resolve_field(view.fields, spec.metric.measure, "metric")
         if measure.type != "number" or measure.expr == "*":
             raise WidgetSpecError("metric", f"'{spec.metric.measure}' cannot be histogrammed")
+        # toFloat64 is required because histogram() rejects Decimal types (e.g. cost is Decimal64).
+        # It is a no-op for Int64/Float64/Nullable measures.
         sql = (
             f"SELECT tupleElement(b, 1) AS lo, tupleElement(b, 2) AS hi, tupleElement(b, 3) AS height "
-            f"FROM (SELECT arrayJoin(histogram({HISTOGRAM_BINS})({measure.expr})) AS b "
+            f"FROM (SELECT arrayJoin(histogram({HISTOGRAM_BINS})(toFloat64({measure.expr}))) AS b "
             f"FROM {base} {where})"
         )
         return sql, params
@@ -119,12 +134,16 @@ def compile_widget_query(
     order_by = ""
 
     is_timeseries = spec.display.type in ("line", "area")
+    has_time_bucket = False
     if is_timeseries:
         gran = _pick_granularity(start_time, end_time)
+        # 'UTC' aligns day/hour boundaries with the UTC time-range params,
+        # regardless of the ClickHouse server's local timezone.
         bucket_fn = "toStartOfHour" if gran == "hour" else "toStartOfDay"
-        select_cols.append(f"{bucket_fn}(event_time) AS bucket")
+        select_cols.append(f"{bucket_fn}(event_time, 'UTC') AS bucket")
         group_cols.append("bucket")
         order_by = "ORDER BY bucket"
+        has_time_bucket = True
 
     if spec.breakdown is not None:
         bd = _resolve_field(view.fields, spec.breakdown, "breakdown")
@@ -132,18 +151,46 @@ def compile_widget_query(
             raise WidgetSpecError("breakdown", f"'{spec.breakdown}' is not groupable")
         # Top-N guard: keep the MAX_GROUPS largest groups, fold the rest into
         # 'other' so a high-cardinality breakdown can't return unbounded rows.
+        # Note: a genuine breakdown value named "other" will merge with this fold
+        # bucket — accepted tradeoff for simplicity.
         select_cols.append(
             f"if({bd.expr} IN (SELECT {bd.expr} FROM {base} {where} "
             f"GROUP BY {bd.expr} ORDER BY {metric_sql} DESC LIMIT {MAX_GROUPS}), "
             f"toString({bd.expr}), 'other') AS {spec.breakdown}"
         )
         group_cols.append(spec.breakdown)
-        if not order_by:
+        if has_time_bucket:
+            # Include breakdown in ORDER BY for deterministic ordering when
+            # multiple breakdown values share the same bucket.
+            order_by = f"ORDER BY bucket, {spec.breakdown}"
+        else:
             order_by = "ORDER BY value DESC"
 
     select_cols.append(f"{metric_sql} AS value")
     group_by = f"GROUP BY {', '.join(group_cols)}" if group_cols else ""
-    limit = f"LIMIT {MAX_TABLE_ROWS if spec.display.type == 'table' else MAX_GROUPS * 200}"
+
+    # Row cap: for table display use a fixed row limit.
+    # For timeseries or breakdown displays, derive the cap from the actual
+    # query window so that long ranges aren't silently truncated.
+    if spec.display.type == "table":
+        row_limit = MAX_TABLE_ROWS
+    elif has_time_bucket:
+        # Each time bucket can have up to (MAX_GROUPS + 1) rows: one per
+        # breakdown group plus the 'other' fold bucket. Compute the number of
+        # expected buckets from the window size so every bucket is included.
+        gran = _pick_granularity(start_time, end_time)
+        granule_seconds = 3600 if gran == "hour" else 86400
+        window_seconds = (end_time - start_time).total_seconds()
+        n_buckets = math.ceil(window_seconds / granule_seconds)
+        row_limit = n_buckets * (MAX_GROUPS + 1)
+    elif spec.breakdown is not None:
+        # Pure breakdown (no time axis): one row per group + 'other'.
+        row_limit = MAX_GROUPS + 1
+    else:
+        # No dimensions: single aggregate row.
+        row_limit = 1
+
+    limit = f"LIMIT {row_limit}"
 
     sql = f"SELECT {', '.join(select_cols)} FROM {base} {where} {group_by} {order_by} {limit}"
     return sql, params
