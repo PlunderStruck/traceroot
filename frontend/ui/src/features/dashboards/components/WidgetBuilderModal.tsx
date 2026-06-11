@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -212,20 +212,29 @@ export function WidgetBuilderModal({
     idx: number,
     patch: Partial<{ field: string; op: string; value: string | number }>,
   ) {
-    const next = filters.map((f, i) => (i === idx ? { ...f, ...patch } : f));
-    setDraft((d) => ({ ...d, filters: next }) as unknown as DraftSpec);
+    setDraft(
+      (d) =>
+        ({
+          ...d,
+          filters: (d.filters ?? []).map((f, i) => (i === idx ? { ...f, ...patch } : f)),
+        }) as unknown as DraftSpec,
+    );
   }
 
   function handleFilterRemove(idx: number) {
     setDraft(
-      (d) => ({ ...d, filters: filters.filter((_, i) => i !== idx) }) as unknown as DraftSpec,
+      (d) =>
+        ({ ...d, filters: (d.filters ?? []).filter((_, i) => i !== idx) }) as unknown as DraftSpec,
     );
   }
 
   function handleAddFilter() {
     setDraft(
       (d) =>
-        ({ ...d, filters: [...filters, { field: "", op: "", value: "" }] }) as unknown as DraftSpec,
+        ({
+          ...d,
+          filters: [...(d.filters ?? []), { field: "", op: "", value: "" }],
+        }) as unknown as DraftSpec,
     );
   }
 
@@ -254,12 +263,21 @@ export function WidgetBuilderModal({
 
   // ── display ───────────────────────────────────────────────────────────────
   function handleDisplayChange(t: (typeof DISPLAY_TYPES)[number]) {
-    setDraft((d) => ({ ...d, display: { type: t } }));
+    setDraft((d) => ({
+      ...d,
+      display: { type: t },
+      // histogram does not support breakdown — clear it automatically
+      ...(t === "histogram" ? { breakdown: null } : {}),
+    }));
   }
 
   // ── preview ───────────────────────────────────────────────────────────────
   const debouncedDraft = useDebounced(draft, 400);
   const preview = useWidgetPreview(projectId, debouncedDraft, range);
+
+  // Memoize the parsed spec from the debounced draft so the preview render
+  // branch can safely read spec.display.type without non-null assertions.
+  const debouncedSpec = useMemo(() => parseSpec(debouncedDraft), [debouncedDraft]);
 
   const specComplete = isSpecComplete(draft);
   const canSave = specComplete && title.trim().length > 0;
@@ -388,7 +406,7 @@ export function WidgetBuilderModal({
               <Select
                 value={draft.breakdown ?? NONE_SENTINEL}
                 onValueChange={handleBreakdownChange}
-                disabled={!view}
+                disabled={!view || draft.display?.type === "histogram"}
               >
                 <SelectTrigger className="h-7 text-[12px]">
                   <SelectValue placeholder="None" />
@@ -404,6 +422,11 @@ export function WidgetBuilderModal({
                   ))}
                 </SelectContent>
               </Select>
+              {draft.display?.type === "histogram" && (
+                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                  Not available for histograms
+                </p>
+              )}
             </div>
 
             {/* 5 display */}
@@ -442,7 +465,7 @@ export function WidgetBuilderModal({
                 <div className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
                   Complete steps 1–5 to preview
                 </div>
-              ) : preview.isLoading ? (
+              ) : preview.isPending ? (
                 <div className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
                   Running…
                 </div>
@@ -450,8 +473,8 @@ export function WidgetBuilderModal({
                 <div className="flex h-full items-start justify-center pt-8 text-[12px] text-red-600">
                   {preview.error instanceof Error ? preview.error.message : "Query failed"}
                 </div>
-              ) : preview.data ? (
-                <QueryWidgetRenderer display={draft.display!.type!} result={preview.data} />
+              ) : preview.data && debouncedSpec ? (
+                <QueryWidgetRenderer display={debouncedSpec.display.type} result={preview.data} />
               ) : null}
             </div>
           </div>

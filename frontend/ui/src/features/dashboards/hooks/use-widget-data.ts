@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSession as useAuthSession } from "@/lib/auth-client";
 import type { TraceApiUser } from "@/lib/api/client";
 import * as api from "../api";
@@ -68,5 +68,6 @@ export function useWidgetPreview(projectId: string, draft: unknown, range: TimeR
     enabled: sessionReady && !!projectId && isSpecComplete(draft),
     staleTime: 10_000,
     retry: false,
+    placeholderData: keepPreviousData,
   });
 }
