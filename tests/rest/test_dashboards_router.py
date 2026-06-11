@@ -60,3 +60,12 @@ def test_query_endpoint_pydantic_error_is_422(client):
     bad = {**VALID_BODY, "spec": {**VALID_BODY["spec"], "display": {"type": "gauge"}}}
     resp = client.post("/api/v1/projects/proj-1/widgets/query", json=bad)
     assert resp.status_code == 422
+
+
+def test_query_endpoint_no_auth_is_not_200():
+    """Without the dependency override, auth is enforced — must not return 200."""
+    # Don't override get_project_access — let it run for real.
+    # The real auth dep makes an httpx call that fails fast in tests.
+    test_client = TestClient(app, raise_server_exceptions=False)
+    resp = test_client.post("/api/v1/projects/proj-1/widgets/query", json=VALID_BODY)
+    assert resp.status_code in (401, 503)

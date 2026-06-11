@@ -6,6 +6,7 @@ import { useSession as useAuthSession } from "@/lib/auth-client";
 import type { TraceApiUser } from "@/lib/api/client";
 import { getTraces } from "@/lib/api/traces";
 import type { TraceListItem } from "@/types/api";
+import { formatDuration } from "@/lib/utils";
 import type { TimeRange } from "../types";
 
 interface TraceFeedWidgetProps {
@@ -33,11 +34,6 @@ function StatusChip({ errorCount }: { errorCount: number }) {
 function fmtCost(cost: number | null | undefined): string {
   if (cost == null || cost === 0) return "—";
   return `$${cost.toFixed(4)}`;
-}
-
-function fmtLatency(ms: number | null | undefined): string {
-  if (ms == null) return "—";
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function fmtTime(iso: string): string {
@@ -126,7 +122,7 @@ export function TraceFeedWidget({ projectId, spec, range, live }: TraceFeedWidge
                 {fmtCost(trace.total_cost)}
               </td>
               <td className="py-1 tabular-nums text-muted-foreground">
-                {fmtLatency(trace.duration_ms)}
+                {formatDuration(trace.duration_ms)}
               </td>
             </tr>
           ))}

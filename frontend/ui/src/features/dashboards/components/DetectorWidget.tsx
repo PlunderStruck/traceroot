@@ -23,7 +23,7 @@ async function fetchDetector(
 }
 
 async function fetchFindings(projectId: string, detectorId: string): Promise<FindingsResponse> {
-  const res = await fetch(`/api/projects/${projectId}/detectors/${detectorId}/findings?limit=50`);
+  const res = await fetch(`/api/projects/${projectId}/detectors/${detectorId}/findings?limit=1`);
   if (!res.ok) throw new Error(`Failed to fetch findings: ${res.status}`);
   return res.json() as Promise<FindingsResponse>;
 }
@@ -58,7 +58,7 @@ export function DetectorWidget({ projectId, spec, live }: DetectorWidgetProps) {
   const { data: findingsData, isLoading: findingsLoading } = useQuery({
     queryKey: ["detector-widget-findings", projectId, detectorId],
     queryFn: () => fetchFindings(projectId, detectorId),
-    enabled: !!projectId && !!detectorId && !detectorDeleted && !detectorLoading,
+    enabled: !!projectId && !!detectorId && !detectorDeleted && !detectorLoading && !!detector,
     refetchInterval: live ? 30_000 : false,
   });
 
@@ -76,7 +76,7 @@ export function DetectorWidget({ projectId, spec, live }: DetectorWidgetProps) {
     return <p className="text-[11.5px] text-red-500">Failed to load detector</p>;
   }
 
-  const total = findingsData?.meta.total ?? 0;
+  const total = findingsData?.meta.total;
   const lastFinding = findingsData?.data[0];
 
   return (
@@ -85,7 +85,7 @@ export function DetectorWidget({ projectId, spec, live }: DetectorWidgetProps) {
 
       <div className="flex items-baseline gap-2">
         <span className="text-3xl font-semibold tabular-nums text-amber-700 dark:text-amber-300">
-          {findingsLoading ? "—" : total}
+          {total != null ? total : "—"}
         </span>
         <span className="text-[11.5px] text-muted-foreground">findings</span>
       </div>

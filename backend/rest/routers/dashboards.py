@@ -41,7 +41,7 @@ async def query_widget_data(
         )
     except WidgetSpecError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"step": e.step, "message": e.message},
         ) from e
     except Exception as e:
