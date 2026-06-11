@@ -46,6 +46,7 @@ export function useWidgetData(
     enabled: enabled && sessionReady && !!projectId && !!widgetId,
     refetchInterval: live ? 30_000 : false,
     retry: 1,
+    placeholderData: keepPreviousData,
   });
 }
 

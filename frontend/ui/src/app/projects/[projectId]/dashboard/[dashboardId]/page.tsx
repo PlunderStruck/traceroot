@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ProjectBreadcrumb } from "@/features/projects/components";
 import {
   useDashboards,
@@ -37,6 +38,7 @@ function makeRange(days: number): TimeRange {
 export default function DashboardDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const projectId = params.projectId as string;
   const dashboardId = params.dashboardId as string;
 
@@ -51,12 +53,15 @@ export default function DashboardDetailPage() {
   const [rangeDays, setRangeDays] = useState(7);
   const [range, setRange] = useState<TimeRange>(() => makeRange(7));
 
-  useEffect(() => {
-    setRange(makeRange(rangeDays));
-  }, [rangeDays]);
-
   // ── live toggle ──────────────────────────────────────────────────────────────
   const [live, setLive] = useState(false);
+
+  // Slide the window forward every 30 s while live so new traces appear.
+  useEffect(() => {
+    if (!live) return;
+    const id = setInterval(() => setRange(makeRange(rangeDays)), 30_000);
+    return () => clearInterval(id);
+  }, [live, rangeDays]);
 
   // ── grid width via ResizeObserver ────────────────────────────────────────────
   const [width, setWidth] = useState(1200);
@@ -101,16 +106,17 @@ export default function DashboardDetailPage() {
       }
       closeModal();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editing],
+    [editing, updateWidget.mutate, createWidget.mutate],
   );
 
   // ── deleted / missing dashboard redirect ─────────────────────────────────────
   useEffect(() => {
     if (dashboardError) {
+      // Invalidate the list so a stale cache can't bounce the user back here.
+      void queryClient.invalidateQueries({ queryKey: ["dashboards", projectId] });
       router.replace(`/projects/${projectId}/dashboard`);
     }
-  }, [dashboardError, projectId, router]);
+  }, [dashboardError, projectId, queryClient, router]);
 
   // useDashboard resolves to undefined while loading and throws on 404/error,
   // so dashboardError above handles the redirect. No additional null check needed.
@@ -212,7 +218,10 @@ export default function DashboardDetailPage() {
                   <DropdownMenuItem
                     key={preset.days}
                     className="text-[12px]"
-                    onClick={() => setRangeDays(preset.days)}
+                    onClick={() => {
+                      setRangeDays(preset.days);
+                      setRange(makeRange(preset.days));
+                    }}
                   >
                     {preset.label}
                   </DropdownMenuItem>
