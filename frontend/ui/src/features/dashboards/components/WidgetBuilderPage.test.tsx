@@ -230,6 +230,28 @@ describe("WidgetBuilderPage", () => {
     expect(screen.queryByText("Field")).toBeNull();
   });
 
+  it("changes the breakdown field and can reset it back to none", async () => {
+    render(<WidgetBuilderPage projectId="p1" dashboardId="d1" widgetId="w1" />);
+
+    openSelect("None");
+    fireEvent.click(await screen.findByRole("option", { name: "Model" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save widget" }));
+    expect(updateWidget.mutate).toHaveBeenCalledTimes(1);
+    expect(updateWidget.mutate.mock.calls[0][0]).toMatchObject({
+      spec: expect.objectContaining({ breakdown: "model_name" }),
+    });
+
+    openSelect("Model");
+    fireEvent.click(await screen.findByRole("option", { name: "None" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save widget" }));
+    expect(updateWidget.mutate).toHaveBeenCalledTimes(2);
+    expect(updateWidget.mutate.mock.calls[1][0]).toMatchObject({
+      spec: expect.objectContaining({ breakdown: null }),
+    });
+  });
+
   it("shows an inline error when the save mutation fails", () => {
     updateWidget.error = new Error("boom");
     render(<WidgetBuilderPage projectId="p1" dashboardId="d1" widgetId="w1" />);
