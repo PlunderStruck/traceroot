@@ -17,12 +17,10 @@ function QueryWidgetBody({
   projectId,
   widget,
   range,
-  live,
 }: {
   projectId: string;
   widget: Widget;
   range: TimeRange;
-  live: boolean;
 }) {
   const spec = parseSpec(widget.spec);
 
@@ -39,7 +37,6 @@ function QueryWidgetBody({
       display: { type: "number" },
     },
     range,
-    live,
     spec !== null,
   );
 
@@ -64,7 +61,6 @@ export function WidgetCard({
   projectId,
   widget,
   range,
-  live,
   onEdit,
   onDuplicate,
   onDelete,
@@ -72,7 +68,6 @@ export function WidgetCard({
   projectId: string;
   widget: Widget;
   range: TimeRange;
-  live: boolean;
   onEdit: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -116,22 +111,17 @@ export function WidgetCard({
       {/* Body */}
       <div className="min-h-0 flex-1">
         {widget.type === "query" && (
-          <QueryWidgetBody projectId={projectId} widget={widget} range={range} live={live} />
+          <QueryWidgetBody projectId={projectId} widget={widget} range={range} />
         )}
         {widget.type === "trace_feed" && (
           <TraceFeedWidget
             projectId={projectId}
             spec={widget.spec as { limit?: number }}
             range={range}
-            live={live}
           />
         )}
         {widget.type === "detector" && (
-          <DetectorWidget
-            projectId={projectId}
-            spec={widget.spec as { detectorId: string }}
-            live={live}
-          />
+          <DetectorWidget projectId={projectId} spec={widget.spec as { detectorId: string }} />
         )}
       </div>
     </div>

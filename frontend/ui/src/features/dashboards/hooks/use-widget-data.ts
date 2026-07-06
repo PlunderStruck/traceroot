@@ -30,7 +30,6 @@ export function useWidgetData(
   widgetId: string,
   spec: WidgetSpec,
   range: TimeRange,
-  live: boolean,
   enabled = true,
 ) {
   const { data: authSession, isPending } = useAuthSession();
@@ -50,7 +49,6 @@ export function useWidgetData(
     ],
     queryFn: () => api.runWidgetQuery(projectId, spec, range, user),
     enabled: enabled && sessionReady && !!projectId && !!widgetId,
-    refetchInterval: live ? 30_000 : false,
     retry: 1,
     placeholderData: keepPreviousData,
   });

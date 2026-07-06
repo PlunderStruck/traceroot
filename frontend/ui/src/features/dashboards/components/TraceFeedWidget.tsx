@@ -13,7 +13,6 @@ interface TraceFeedWidgetProps {
   projectId: string;
   spec: { limit?: number };
   range: TimeRange;
-  live: boolean;
 }
 
 function StatusChip({ errorCount }: { errorCount: number }) {
@@ -44,7 +43,7 @@ function fmtTime(iso: string): string {
   });
 }
 
-export function TraceFeedWidget({ projectId, spec, range, live }: TraceFeedWidgetProps) {
+export function TraceFeedWidget({ projectId, spec, range }: TraceFeedWidgetProps) {
   const limit = spec.limit ?? 10;
   const { data: authSession, isPending } = useAuthSession();
   const sessionReady = !isPending && !!authSession?.user;
@@ -67,7 +66,6 @@ export function TraceFeedWidget({ projectId, spec, range, live }: TraceFeedWidge
         user,
       ),
     enabled: sessionReady && !!projectId,
-    refetchInterval: live ? 5_000 : false,
   });
 
   if (isLoading) {

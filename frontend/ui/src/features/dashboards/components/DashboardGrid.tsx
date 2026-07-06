@@ -15,7 +15,6 @@ export function DashboardGrid({
   widgets,
   layout,
   range,
-  live,
   width,
   onLayoutChange,
   onEdit,
@@ -26,7 +25,6 @@ export function DashboardGrid({
   widgets: Widget[];
   layout: LayoutItem[];
   range: TimeRange;
-  live: boolean;
   width: number;
   onLayoutChange: (layout: LayoutItem[]) => void;
   onEdit: (w: Widget) => void;
@@ -108,7 +106,6 @@ export function DashboardGrid({
             projectId={projectId}
             widget={w}
             range={range}
-            live={live}
             onEdit={() => onEdit(w)}
             onDuplicate={() => onDuplicate(w)}
             onDelete={() => onDelete(w)}

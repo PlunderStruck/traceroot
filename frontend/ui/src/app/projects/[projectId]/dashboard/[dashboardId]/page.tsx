@@ -53,16 +53,6 @@ export default function DashboardDetailPage() {
   const [rangeDays, setRangeDays] = useState(7);
   const [range, setRange] = useState<TimeRange>(() => makeRange(7));
 
-  // ── live toggle ──────────────────────────────────────────────────────────────
-  const [live, setLive] = useState(false);
-
-  // Slide the window forward every 30 s while live so new traces appear.
-  useEffect(() => {
-    if (!live) return;
-    const id = setInterval(() => setRange(makeRange(rangeDays)), 30_000);
-    return () => clearInterval(id);
-  }, [live, rangeDays]);
-
   // ── grid width via ResizeObserver ────────────────────────────────────────────
   const [width, setWidth] = useState(1200);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -205,7 +195,7 @@ export default function DashboardDetailPage() {
             </div>
           </div>
 
-          {/* Right: time range, live, create widget */}
+          {/* Right: time range, create widget */}
           <div className="flex items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -228,21 +218,6 @@ export default function DashboardDetailPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={live}
-              onClick={() => setLive((v) => !v)}
-              className={cn(
-                "rounded border px-2.5 py-1 text-[12px] transition-colors",
-                live
-                  ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                  : "border-border text-muted-foreground hover:border-foreground/40 hover:bg-muted",
-              )}
-            >
-              Live
-            </button>
 
             <Button size="sm" className="h-7 text-[12px]" onClick={openCreate}>
               ＋ Create widget
@@ -269,7 +244,6 @@ export default function DashboardDetailPage() {
               widgets={widgets}
               layout={layout}
               range={range}
-              live={live}
               width={width}
               onLayoutChange={handleLayoutChange}
               onEdit={openEdit}

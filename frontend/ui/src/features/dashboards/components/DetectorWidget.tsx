@@ -9,7 +9,6 @@ import type { RunsResponse } from "@/features/detectors/hooks/use-findings";
 interface DetectorWidgetProps {
   projectId: string;
   spec: { detectorId: string };
-  live: boolean;
 }
 
 async function fetchDetector(
@@ -40,7 +39,7 @@ function fmtTimestamp(iso: string): string {
   });
 }
 
-export function DetectorWidget({ projectId, spec, live }: DetectorWidgetProps) {
+export function DetectorWidget({ projectId, spec }: DetectorWidgetProps) {
   const { detectorId } = spec;
 
   const {
@@ -62,7 +61,6 @@ export function DetectorWidget({ projectId, spec, live }: DetectorWidgetProps) {
     queryKey: ["detector-widget-findings", projectId, detectorId],
     queryFn: () => fetchFindings(projectId, detectorId),
     enabled: !!projectId && !!detectorId && !detectorDeleted && !detectorLoading && !!detector,
-    refetchInterval: live ? 30_000 : false,
   });
 
   if (detectorLoading) {
