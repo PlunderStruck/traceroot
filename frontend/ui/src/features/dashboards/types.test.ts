@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  WidgetSchemaField,
   WidgetSpecSchema,
   filterOpLabel,
+  generateWidgetTitle,
   isEnumerableFilter,
   isSpecComplete,
   parseSpec,
@@ -94,5 +96,57 @@ describe("filterOpLabel", () => {
   it("falls back to the raw op when the field is unknown", () => {
     expect(filterOpLabel(undefined, ">=")).toBe("≥");
     expect(filterOpLabel(undefined, "=")).toBe("=");
+  });
+});
+
+describe("generateWidgetTitle", () => {
+  const fields = {
+    cost: { type: "number", label: "Cost", filterOps: [], groupable: false, aggs: ["sum"] },
+    duration_ms: {
+      type: "number",
+      label: "Latency",
+      filterOps: [],
+      groupable: false,
+      aggs: ["p95"],
+    },
+    model_name: { type: "string", label: "Model", filterOps: [], groupable: true, aggs: [] },
+  } as Record<string, WidgetSchemaField>;
+
+  it("names agg + measure with registry labels", () => {
+    expect(
+      generateWidgetTitle({ view: "traces", metric: { measure: "cost", agg: "sum" } }, fields),
+    ).toBe("Total Cost");
+    expect(
+      generateWidgetTitle(
+        { view: "traces", metric: { measure: "duration_ms", agg: "p95" } },
+        fields,
+      ),
+    ).toBe("p95 Latency");
+  });
+
+  it("appends the breakdown label", () => {
+    expect(
+      generateWidgetTitle(
+        { view: "spans", metric: { measure: "cost", agg: "sum" }, breakdown: "model_name" },
+        fields,
+      ),
+    ).toBe("Total Cost by Model");
+  });
+
+  it("names count widgets after the view", () => {
+    expect(
+      generateWidgetTitle({ view: "spans", metric: { measure: "count", agg: "count" } }, fields),
+    ).toBe("Count of spans");
+  });
+
+  it("is empty until measure and agg are chosen", () => {
+    expect(generateWidgetTitle({ view: "spans" }, fields)).toBe("");
+    expect(generateWidgetTitle({ view: "spans", metric: { measure: "cost" } }, fields)).toBe("");
+  });
+
+  it("falls back to raw field names when the schema lacks a label", () => {
+    expect(
+      generateWidgetTitle({ view: "spans", metric: { measure: "input_tokens", agg: "avg" } }, {}),
+    ).toBe("Avg input_tokens");
   });
 });

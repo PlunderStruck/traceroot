@@ -127,6 +127,39 @@ export function filterOpLabel(field: WidgetSchemaField | undefined, op: string):
   return NUMERIC_OP_SYMBOL[op] ?? op;
 }
 
+// Display words for aggregations in generated widget titles.
+const AGG_TITLE: Record<string, string> = {
+  count: "Count",
+  sum: "Total",
+  avg: "Avg",
+  min: "Min",
+  max: "Max",
+  p50: "p50",
+  p95: "p95",
+  p99: "p99",
+};
+
+/**
+ * Auto-generated widget name for the builder: "{Agg} {measure label}" plus
+ * " by {breakdown label}" when a breakdown is set (e.g. "p95 Latency by Model",
+ * "Count of spans"). Empty until measure and agg are chosen. The builder shows
+ * this until the user edits the name, then never overwrites their text.
+ */
+export function generateWidgetTitle(
+  draft: DraftSpec,
+  viewFields: Record<string, WidgetSchemaField>,
+): string {
+  const measure = draft.metric?.measure;
+  const agg = draft.metric?.agg;
+  if (!measure || !agg) return "";
+  const base =
+    measure === "count"
+      ? `Count of ${draft.view ?? "rows"}`
+      : `${AGG_TITLE[agg] ?? agg} ${viewFields[measure]?.label ?? measure}`;
+  if (!draft.breakdown) return base;
+  return `${base} by ${viewFields[draft.breakdown]?.label ?? draft.breakdown}`;
+}
+
 export interface TimeRange {
   start: Date;
   end: Date;
