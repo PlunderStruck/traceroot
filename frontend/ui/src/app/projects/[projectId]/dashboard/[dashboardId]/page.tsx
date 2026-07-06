@@ -11,7 +11,6 @@ import {
   useDashboardMutations,
 } from "@/features/dashboards/hooks/use-dashboards";
 import { DashboardGrid } from "@/features/dashboards/components/DashboardGrid";
-import { WidgetBuilderModal } from "@/features/dashboards/components/WidgetBuilderModal";
 import type { TimeRange, Widget } from "@/features/dashboards/types";
 import { RANGE_PRESETS, makeRange } from "@/features/dashboards/range-presets";
 import { Button } from "@/components/ui/button";
@@ -34,8 +33,10 @@ export default function DashboardDetailPage() {
   const { data: dashboards } = useDashboards(projectId);
   const { data: dashboard, error: dashboardError } = useDashboard(projectId, dashboardId);
 
-  const { createDashboard, updateLayout, createWidget, updateWidget, removeWidget } =
-    useDashboardMutations(projectId, dashboardId);
+  const { createDashboard, updateLayout, createWidget, removeWidget } = useDashboardMutations(
+    projectId,
+    dashboardId,
+  );
 
   // ── time range ───────────────────────────────────────────────────────────────
   const [rangeDays, setRangeDays] = useState(7);
@@ -56,36 +57,12 @@ export default function DashboardDetailPage() {
     return () => ro.disconnect();
   }, []);
 
-  // ── modal / editing ──────────────────────────────────────────────────────────
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Widget | null>(null);
+  // ── widget builder navigation ────────────────────────────────────────────────
+  const openCreate = () =>
+    router.push(`/projects/${projectId}/dashboard/${dashboardId}/widgets/new`);
 
-  const openCreate = () => {
-    setEditing(null);
-    setModalOpen(true);
-  };
-
-  const openEdit = (w: Widget) => {
-    setEditing(w);
-    setModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setEditing(null);
-  };
-
-  const saveWidget = useCallback(
-    (v: { title: string; spec: object }) => {
-      if (editing) {
-        updateWidget.mutate({ widgetId: editing.id, title: v.title, spec: v.spec });
-      } else {
-        createWidget.mutate({ title: v.title, type: "query", spec: v.spec });
-      }
-      closeModal();
-    },
-    [editing, updateWidget.mutate, createWidget.mutate],
-  );
+  const openEdit = (w: Widget) =>
+    router.push(`/projects/${projectId}/dashboard/${dashboardId}/widgets/${w.id}/edit`);
 
   // ── deleted / missing dashboard redirect ─────────────────────────────────────
   useEffect(() => {
@@ -241,15 +218,6 @@ export default function DashboardDetailPage() {
           )}
         </div>
       </div>
-
-      <WidgetBuilderModal
-        projectId={projectId}
-        range={range}
-        open={modalOpen}
-        editing={editing}
-        onClose={closeModal}
-        onSave={saveWidget}
-      />
     </div>
   );
 }
