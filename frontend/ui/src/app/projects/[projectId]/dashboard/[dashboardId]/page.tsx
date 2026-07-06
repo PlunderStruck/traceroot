@@ -13,6 +13,7 @@ import {
 import { DashboardGrid } from "@/features/dashboards/components/DashboardGrid";
 import { WidgetBuilderModal } from "@/features/dashboards/components/WidgetBuilderModal";
 import type { TimeRange, Widget } from "@/features/dashboards/types";
+import { RANGE_PRESETS, makeRange } from "@/features/dashboards/range-presets";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,19 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-
-const RANGE_PRESETS = [
-  { label: "Last 24 hours", days: 1 },
-  { label: "Last 7 days", days: 7 },
-  { label: "Last 30 days", days: 30 },
-] as const;
-
-function makeRange(days: number): TimeRange {
-  return {
-    start: new Date(Date.now() - days * 86_400_000),
-    end: new Date(),
-  };
-}
 
 export default function DashboardDetailPage() {
   const params = useParams();
