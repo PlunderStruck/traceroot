@@ -214,7 +214,8 @@ export function WidgetBuilderPage({
     if (!spec) return;
     const payload = { title: effectiveTitle.trim(), spec };
     const onSuccess = () => router.push(dashboardUrl);
-    if (isEdit && widget) {
+    if (isEdit) {
+      if (!widget) return; // deleted from under us — the redirect guard takes over
       updateWidget.mutate({ widgetId: widget.id, ...payload }, { onSuccess });
     } else {
       createWidget.mutate({ ...payload, type: "query" }, { onSuccess });

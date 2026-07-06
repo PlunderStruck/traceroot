@@ -252,6 +252,29 @@ describe("WidgetBuilderPage", () => {
     });
   });
 
+  it("does not fall through to create when editing and the widget disappears from the dashboard", () => {
+    render(<WidgetBuilderPage projectId="p1" dashboardId="d1" widgetId="nope" />);
+    const save = screen.getByRole("button", { name: "Save widget" });
+    fireEvent.click(save);
+    expect(createWidget.mutate).not.toHaveBeenCalled();
+    expect(updateWidget.mutate).not.toHaveBeenCalled();
+  });
+
+  it("clears an existing breakdown when switching to histogram display before saving", async () => {
+    render(<WidgetBuilderPage projectId="p1" dashboardId="d1" widgetId="w1" />);
+
+    openSelect("None");
+    fireEvent.click(await screen.findByRole("option", { name: "Model" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "histogram" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save widget" }));
+    expect(updateWidget.mutate).toHaveBeenCalledTimes(1);
+    expect(updateWidget.mutate.mock.calls[0][0]).toMatchObject({
+      spec: expect.objectContaining({ breakdown: null }),
+    });
+  });
+
   it("shows an inline error when the save mutation fails", () => {
     updateWidget.error = new Error("boom");
     render(<WidgetBuilderPage projectId="p1" dashboardId="d1" widgetId="w1" />);
