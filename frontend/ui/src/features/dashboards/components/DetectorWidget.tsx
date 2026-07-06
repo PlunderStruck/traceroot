@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import type { Detector } from "@/features/detectors/hooks/use-detectors";
-import type { FindingsResponse } from "@/features/detectors/hooks/use-findings";
+import type { RunsResponse } from "@/features/detectors/hooks/use-findings";
 
 interface DetectorWidgetProps {
   projectId: string;
@@ -22,10 +22,13 @@ async function fetchDetector(
   return res.json() as Promise<{ detector: Detector }>;
 }
 
-async function fetchFindings(projectId: string, detectorId: string): Promise<FindingsResponse> {
-  const res = await fetch(`/api/projects/${projectId}/detectors/${detectorId}/findings?limit=1`);
+async function fetchFindings(projectId: string, detectorId: string): Promise<RunsResponse> {
+  // Findings are triggered runs; the runs endpoint filters them via `identified`.
+  const res = await fetch(
+    `/api/projects/${projectId}/detectors/${detectorId}/runs?identified=true&limit=1`,
+  );
   if (!res.ok) throw new Error(`Failed to fetch findings: ${res.status}`);
-  return res.json() as Promise<FindingsResponse>;
+  return res.json() as Promise<RunsResponse>;
 }
 
 function fmtTimestamp(iso: string): string {
