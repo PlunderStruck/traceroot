@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +28,7 @@ import {
   type WidgetSchemaField,
 } from "../types";
 import { useWidgetPreview, useWidgetSchema } from "../hooks/use-widget-data";
+import { FilterRow } from "./FilterRow";
 import { QueryWidgetRenderer } from "./renderers";
 
 // ── small hook ───────────────────────────────────────────────────────────────
@@ -49,90 +49,6 @@ const NONE_SENTINEL = "__none__";
 type View = "spans" | "traces";
 
 const EMPTY_DRAFT: DraftSpec = { filters: [], breakdown: null };
-
-// ── filter row ────────────────────────────────────────────────────────────────
-
-function FilterRow({
-  index,
-  filter,
-  filterableFields,
-  fieldsMap,
-  onChange,
-  onRemove,
-}: {
-  index: number;
-  filter: { field: string; op: string; value: string | number };
-  filterableFields: [string, WidgetSchemaField][];
-  fieldsMap: Record<string, WidgetSchemaField>;
-  onChange: (idx: number, patch: Partial<typeof filter>) => void;
-  onRemove: (idx: number) => void;
-}) {
-  const fieldMeta = fieldsMap[filter.field];
-  const ops = fieldMeta?.filterOps ?? [];
-  const isNumeric = fieldMeta?.type === "number";
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {/* field */}
-      <Select
-        value={filter.field || undefined}
-        onValueChange={(v) => onChange(index, { field: v, op: "", value: "" })}
-      >
-        <SelectTrigger className="h-7 flex-1 text-[12px]">
-          <SelectValue placeholder="Field" />
-        </SelectTrigger>
-        <SelectContent>
-          {filterableFields.map(([key, meta]) => (
-            <SelectItem key={key} value={key} className="text-[12px]">
-              {meta.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* op */}
-      <Select
-        value={filter.op || undefined}
-        onValueChange={(v) => onChange(index, { op: v })}
-        disabled={!filter.field}
-      >
-        <SelectTrigger className="h-7 w-24 text-[12px]">
-          <SelectValue placeholder="Op" />
-        </SelectTrigger>
-        <SelectContent>
-          {ops.map((op) => (
-            <SelectItem key={op} value={op} className="text-[12px]">
-              {op}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* value */}
-      <Input
-        className="h-7 flex-1 text-[12px]"
-        placeholder="Value"
-        type={isNumeric ? "number" : "text"}
-        value={String(filter.value)}
-        onChange={(e) => {
-          const raw = e.target.value;
-          onChange(index, { value: isNumeric && raw !== "" ? Number(raw) : raw });
-        }}
-        disabled={!filter.field}
-      />
-
-      {/* remove */}
-      <button
-        type="button"
-        onClick={() => onRemove(index)}
-        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-        aria-label="Remove filter"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
 
 // ── section label ─────────────────────────────────────────────────────────────
 
@@ -352,6 +268,9 @@ export function WidgetBuilderModal({
                     fieldsMap={viewFields}
                     onChange={handleFilterChange}
                     onRemove={handleFilterRemove}
+                    projectId={projectId}
+                    view={view}
+                    range={range}
                   />
                 ))}
                 <button

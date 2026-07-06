@@ -5,6 +5,7 @@ import type {
   LayoutItem,
   TimeRange,
   Widget,
+  WidgetFieldValuesResponse,
   WidgetQueryResult,
   WidgetSchema,
   WidgetSpec,
@@ -77,6 +78,24 @@ export function deleteWidget(projectId: string, dashboardId: string, widgetId: s
 // The TRACE_API_BASE already includes /api/v1, so paths begin with /projects/...
 export function fetchWidgetSchema(projectId: string, user?: TraceApiUser) {
   return fetchTraceApi<WidgetSchema>(`/projects/${projectId}/widgets/schema`, {}, user);
+}
+
+export function fetchWidgetFieldValues(
+  projectId: string,
+  view: "spans" | "traces",
+  field: string,
+  range: TimeRange,
+  user?: TraceApiUser,
+) {
+  const params = new URLSearchParams({
+    start_time: range.start.toISOString(),
+    end_time: range.end.toISOString(),
+  });
+  return fetchTraceApi<WidgetFieldValuesResponse>(
+    `/projects/${projectId}/widgets/field-values/${view}/${encodeURIComponent(field)}?${params}`,
+    {},
+    user,
+  );
 }
 
 export function runWidgetQuery(

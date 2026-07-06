@@ -91,6 +91,25 @@ export type WidgetSchema = Record<
   { fields: Record<string, WidgetSchemaField> }
 >;
 
+export interface WidgetFieldValue {
+  value: string;
+  count: number;
+}
+
+export interface WidgetFieldValuesResponse {
+  field: string;
+  values: WidgetFieldValue[];
+}
+
+/**
+ * Whether a filter's value is one of the field's stored values (so the builder
+ * offers a dropdown of them). Equality on a string dimension is enumerable;
+ * `contains` stays free text and numeric fields take a number input.
+ */
+export function isEnumerableFilter(field: WidgetSchemaField | undefined, op: string): boolean {
+  return !!field && field.type === "string" && (op === "=" || op === "!=");
+}
+
 export interface TimeRange {
   start: Date;
   end: Date;

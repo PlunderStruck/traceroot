@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WidgetSpecSchema, isSpecComplete, parseSpec } from "./types";
+import { WidgetSpecSchema, isEnumerableFilter, isSpecComplete, parseSpec } from "./types";
 
 const validSpec = {
   view: "spans",
@@ -35,5 +35,29 @@ describe("parseSpec", () => {
     const result = parseSpec(withoutFilters);
     expect(result).not.toBeNull();
     expect(result!.filters).toEqual([]);
+  });
+});
+
+describe("isEnumerableFilter", () => {
+  const stringField = {
+    type: "string" as const,
+    label: "Model",
+    filterOps: ["=", "!=", "contains"],
+    groupable: true,
+    aggs: [],
+  };
+  const numberField = { ...stringField, type: "number" as const, label: "Cost" };
+
+  it("true for string equality ops (dropdown of stored values)", () => {
+    expect(isEnumerableFilter(stringField, "=")).toBe(true);
+    expect(isEnumerableFilter(stringField, "!=")).toBe(true);
+  });
+  it("false for contains (free text) and numeric fields", () => {
+    expect(isEnumerableFilter(stringField, "contains")).toBe(false);
+    expect(isEnumerableFilter(numberField, "=")).toBe(false);
+  });
+  it("false while no field or op picked", () => {
+    expect(isEnumerableFilter(undefined, "=")).toBe(false);
+    expect(isEnumerableFilter(stringField, "")).toBe(false);
   });
 });
