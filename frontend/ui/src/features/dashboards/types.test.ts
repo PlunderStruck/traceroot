@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { WidgetSpecSchema, isEnumerableFilter, isSpecComplete, parseSpec } from "./types";
+import {
+  WidgetSpecSchema,
+  filterOpLabel,
+  isEnumerableFilter,
+  isSpecComplete,
+  parseSpec,
+} from "./types";
 
 const validSpec = {
   view: "spans",
@@ -59,5 +65,34 @@ describe("isEnumerableFilter", () => {
   it("false while no field or op picked", () => {
     expect(isEnumerableFilter(undefined, "=")).toBe(false);
     expect(isEnumerableFilter(stringField, "")).toBe(false);
+  });
+});
+
+describe("filterOpLabel", () => {
+  const stringField = {
+    type: "string" as const,
+    label: "Model",
+    filterOps: ["=", "!=", "contains"],
+    groupable: true,
+    aggs: [],
+  };
+  const numberField = { ...stringField, type: "number" as const, label: "Cost" };
+
+  it("words string equality like the trace-list filter builder", () => {
+    expect(filterOpLabel(stringField, "=")).toBe("is");
+    expect(filterOpLabel(stringField, "!=")).toBe("is not");
+    expect(filterOpLabel(stringField, "contains")).toBe("contains");
+  });
+  it("uses the trace-list comparison symbols for numeric ops", () => {
+    expect(filterOpLabel(numberField, ">=")).toBe("≥");
+    expect(filterOpLabel(numberField, "<=")).toBe("≤");
+    expect(filterOpLabel(numberField, "!=")).toBe("≠");
+    expect(filterOpLabel(numberField, "=")).toBe("=");
+    expect(filterOpLabel(numberField, ">")).toBe(">");
+    expect(filterOpLabel(numberField, "<")).toBe("<");
+  });
+  it("falls back to the raw op when the field is unknown", () => {
+    expect(filterOpLabel(undefined, ">=")).toBe("≥");
+    expect(filterOpLabel(undefined, "=")).toBe("=");
   });
 });

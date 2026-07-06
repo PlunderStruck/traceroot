@@ -11,7 +11,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWidgetFieldValues } from "../hooks/use-widget-data";
-import { isEnumerableFilter, type TimeRange, type WidgetSchemaField } from "../types";
+import {
+  filterOpLabel,
+  isEnumerableFilter,
+  type TimeRange,
+  type WidgetSchemaField,
+} from "../types";
+
+// Unit shown beside the numeric value input, mirroring the trace-list filter
+// builder's adornments ($ for cost, ms for durations).
+const FIELD_UNIT: Record<string, { prefix?: string; suffix?: string }> = {
+  cost: { prefix: "$" },
+  duration_ms: { suffix: "ms" },
+};
 
 export function FilterRow({
   index,
@@ -81,19 +93,21 @@ export function FilterRow({
         </SelectContent>
       </Select>
 
-      {/* op */}
+      {/* op — labeled with the trace-list filter vocabulary (is / is not / ≥ / ≤ / ≠) */}
       <Select
         value={filter.op || undefined}
         onValueChange={(v) => onChange(index, { op: v })}
         disabled={!filter.field}
       >
         <SelectTrigger className="h-7 w-24 text-[12px]">
-          <SelectValue placeholder="Op" />
+          <SelectValue placeholder="Op">
+            {filter.op ? filterOpLabel(fieldMeta, filter.op) : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {ops.map((op) => (
             <SelectItem key={op} value={op} className="text-[12px]">
-              {op}
+              {filterOpLabel(fieldMeta, op)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -117,17 +131,29 @@ export function FilterRow({
           </SelectContent>
         </Select>
       ) : (
-        <Input
-          className="h-7 flex-1 text-[12px]"
-          placeholder="Value"
-          type={isNumeric ? "number" : "text"}
-          value={String(filter.value)}
-          onChange={(e) => {
-            const raw = e.target.value;
-            onChange(index, { value: isNumeric && raw !== "" ? Number(raw) : raw });
-          }}
-          disabled={!filter.field}
-        />
+        <div className="flex flex-1 items-center gap-1">
+          {isNumeric && FIELD_UNIT[filter.field]?.prefix && (
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {FIELD_UNIT[filter.field].prefix}
+            </span>
+          )}
+          <Input
+            className="h-7 flex-1 text-[12px]"
+            placeholder="Value"
+            type={isNumeric ? "number" : "text"}
+            value={String(filter.value)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              onChange(index, { value: isNumeric && raw !== "" ? Number(raw) : raw });
+            }}
+            disabled={!filter.field}
+          />
+          {isNumeric && FIELD_UNIT[filter.field]?.suffix && (
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {FIELD_UNIT[filter.field].suffix}
+            </span>
+          )}
+        </div>
       )}
 
       {/* remove */}

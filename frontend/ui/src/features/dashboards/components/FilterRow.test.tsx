@@ -16,19 +16,21 @@ const stringField: WidgetSchemaField = {
 };
 const numberField: WidgetSchemaField = {
   type: "number",
-  label: "Cost (USD)",
+  label: "Cost",
   filterOps: [">", ">=", "<", "<=", "=", "!="],
   groupable: false,
   aggs: ["sum"],
 };
+const durationField: WidgetSchemaField = { ...numberField, label: "Duration" };
 
 const baseProps = {
   index: 0,
   filterableFields: [
     ["model_name", stringField],
     ["cost", numberField],
+    ["duration_ms", durationField],
   ] as [string, WidgetSchemaField][],
-  fieldsMap: { model_name: stringField, cost: numberField },
+  fieldsMap: { model_name: stringField, cost: numberField, duration_ms: durationField },
   onChange: vi.fn(),
   onRemove: vi.fn(),
   projectId: "p1",
@@ -74,6 +76,30 @@ describe("FilterRow value input", () => {
     render(<FilterRow {...baseProps} filter={{ field: "cost", op: ">", value: 5 }} />);
     expect(screen.getByRole("spinbutton")).toBeTruthy();
     expect(vi.mocked(useWidgetFieldValues).mock.lastCall?.[4]).toBe(false);
+  });
+
+  it("shows trace-list wording for string ops and symbols for numeric ops", () => {
+    vi.mocked(useWidgetFieldValues).mockReturnValue({ values: [], isLoading: false });
+    const { unmount } = render(
+      <FilterRow {...baseProps} filter={{ field: "model_name", op: "=", value: "" }} />,
+    );
+    expect(screen.getByText("is")).toBeTruthy();
+    unmount();
+
+    render(<FilterRow {...baseProps} filter={{ field: "cost", op: ">=", value: 5 }} />);
+    expect(screen.getByText("≥")).toBeTruthy();
+  });
+
+  it("adorns cost and duration values with their unit like the trace-list builder", () => {
+    vi.mocked(useWidgetFieldValues).mockReturnValue({ values: [], isLoading: false });
+    const { unmount } = render(
+      <FilterRow {...baseProps} filter={{ field: "cost", op: ">", value: 1 }} />,
+    );
+    expect(screen.getByText("$")).toBeTruthy();
+    unmount();
+
+    render(<FilterRow {...baseProps} filter={{ field: "duration_ms", op: ">", value: 100 }} />);
+    expect(screen.getByText("ms")).toBeTruthy();
   });
 
   it("free-text edits still propagate through onChange", () => {

@@ -110,6 +110,23 @@ export function isEnumerableFilter(field: WidgetSchemaField | undefined, op: str
   return !!field && field.type === "string" && (op === "=" || op === "!=");
 }
 
+// Numeric comparison symbols shared with the trace-list filter chips.
+const NUMERIC_OP_SYMBOL: Record<string, string> = { ">=": "≥", "<=": "≤", "!=": "≠" };
+
+/**
+ * Display label for a filter operator, matching the trace-list filter builder's
+ * vocabulary: string equality reads as "is" / "is not"; numeric comparisons use
+ * the same symbols (≥ ≤ ≠). Presentation only — the wire op is unchanged.
+ */
+export function filterOpLabel(field: WidgetSchemaField | undefined, op: string): string {
+  if (field?.type === "string") {
+    if (op === "=") return "is";
+    if (op === "!=") return "is not";
+    return op;
+  }
+  return NUMERIC_OP_SYMBOL[op] ?? op;
+}
+
 export interface TimeRange {
   start: Date;
   end: Date;

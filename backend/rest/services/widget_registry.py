@@ -141,8 +141,11 @@ REGISTRY: dict[str, ViewDef] = {
             "status": _string_dim("status", "Status"),
             "model_name": _string_dim("model_name", "Model"),
             "environment": _string_dim("environment", "Environment"),
-            "duration_ms": _number_measure("duration_ms", "Duration (ms)"),
-            "cost": _number_measure("cost", "Cost (USD)"),
+            # Labels follow the trace-list filter vocabulary (see
+            # rest.services.filters.columns); units surface as input adornments
+            # in the builder, not in the label.
+            "duration_ms": _number_measure("duration_ms", "Duration"),
+            "cost": _number_measure("cost", "Cost"),
             "input_tokens": _number_measure("input_tokens", "Input tokens"),
             "output_tokens": _number_measure("output_tokens", "Output tokens"),
             "total_tokens": _number_measure("total_tokens", "Total tokens"),
@@ -157,10 +160,13 @@ REGISTRY: dict[str, ViewDef] = {
             "user_id": _string_dim("user_id", "User"),
             "session_id": _string_dim("session_id", "Session"),
             "environment": _string_dim("environment", "Environment"),
-            "duration_ms": _number_measure("duration_ms", "Duration (ms)"),
-            "cost": _number_measure("cost", "Cost (USD)"),
-            "total_tokens": _number_measure("total_tokens", "Total tokens"),
-            "error_count": _number_measure("error_count", "Error count"),
+            # Same quantities the trace list exposes — same words (Latency,
+            # Cost, Tokens, Errors), so filtering a widget reads like
+            # filtering the trace list.
+            "duration_ms": _number_measure("duration_ms", "Latency"),
+            "cost": _number_measure("cost", "Cost"),
+            "total_tokens": _number_measure("total_tokens", "Tokens"),
+            "error_count": _number_measure("error_count", "Errors"),
             # expr="*" is a sentinel: the compiler translates it to count(*).
             "count": FieldDef(expr="*", type="number", label="Count", aggs=("count",)),
         },
